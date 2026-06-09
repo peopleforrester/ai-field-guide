@@ -3,6 +3,174 @@ title: What MCP Is
 sidebar_position: 2
 ---
 
-# What MCP Is
+# Module 1 — What MCP Is
 
-*Coming soon — this module is being written.*
+<span className="level-badge badge-beginner">Beginner</span>
+
+**Prerequisite:** None &nbsp;·&nbsp; **Spec anchor:** [MCP 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/architecture) (normative)
+
+---
+
+## Start with the pain
+
+You are building an AI agent. It needs to query GitHub, post to Slack, read from your database, and call an internal REST API.
+
+Without a standard, you wire each connection by hand — custom auth, custom response parsing, custom error handling — for every combination of agent and tool.
+
+Three agents, four tools: **twelve custom integrations to build and maintain.**
+
+```mermaid
+graph LR
+  subgraph problem["❌  Without MCP — N × M integrations"]
+    direction LR
+    A1([Agent A]) -->|custom| G[GitHub]
+    A1 -->|custom| S[Slack]
+    A1 -->|custom| D[(Database)]
+    A2([Agent B]) -->|custom| G
+    A2 -->|custom| S
+    A2 -->|custom| D
+    A3([Agent C]) -->|custom| G
+    A3 -->|custom| S
+    A3 -->|custom| D
+  end
+
+  style problem fill:#1a1a2e,stroke:#ef4444,color:#fff
+```
+
+Add a fourth tool, a fourth agent. The lines multiply. Every new combination is another integration to write, test, and break when the upstream API changes.
+
+MCP solves this by replacing the web of direct connections with a common protocol.
+
+```mermaid
+graph LR
+  subgraph solution["✅  With MCP — N + M integrations"]
+    direction LR
+    B1([Agent A]) --> MCP{MCP}
+    B2([Agent B]) --> MCP
+    B3([Agent C]) --> MCP
+    MCP --> GS[GitHub Server]
+    MCP --> SS[Slack Server]
+    MCP --> DS[Database Server]
+  end
+
+  style solution fill:#0f1a0f,stroke:#10b981,color:#fff
+  style MCP fill:#6366f1,stroke:#6366f1,color:#fff
+```
+
+Build the GitHub server once. Every MCP-compatible agent can use it. That is the **N+M** model: N agents plus M servers, not N times M integrations.
+
+---
+
+## What MCP actually is
+
+**Model Context Protocol (MCP)** is an open standard for connecting AI applications to external tools and data sources.
+
+Technically: it is a **JSON-RPC 2.0 session protocol** focused on context exchange between a client (inside your agent) and a server (exposing tools and data).
+
+:::note[The official analogy]
+Think of MCP like a **USB-C port for AI applications**. Just as USB-C provides a standardized way to connect devices, MCP provides a standardized way to connect AI applications to external systems. — *modelcontextprotocol.io*
+:::
+
+The analogy holds: USB-C means your laptop charges from any compatible charger; MCP means your agent can use any compatible server without custom wiring.
+
+:::info[Who governs MCP]
+MCP launched in November 2024 as an Anthropic project. In December 2025 it was donated to the **Agentic AI Foundation**, a directed fund under the **Linux Foundation**, co-founded with Block and OpenAI. It is now a multi-company open standard — not any single vendor's protocol.
+
+OpenAI, Google (Gemini), Microsoft (Azure AI Foundry, GitHub Copilot), Cursor, and AWS Bedrock all adopted MCP by early 2026. It is the de facto industry standard for AI tool integration.
+:::
+
+---
+
+## How a tool call actually flows
+
+The model never reaches into a tool directly. It expresses intent, and the host routes the call through MCP to the server, which does the real work.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant M as 🤖 Model
+  participant H as 🏠 Host / Agent
+  participant S as 🔌 MCP Server
+  participant A as ⚙️ Real API
+
+  M->>H: I want to call search_issues
+  H->>S: tools/call {name: "search_issues", args: {...}}
+  S->>A: GET /repos/.../issues?q=...
+  A-->>S: JSON response
+  S-->>H: Formatted tool result
+  H-->>M: Tool result added to context
+```
+
+The model only ever sees the tool's **name**, **description**, and **input schema** — never the API behind it. Step 3 is completely invisible to the model.
+
+---
+
+## MCP and function calling are not competitors
+
+This is the most common misconception. They operate at different layers.
+
+```mermaid
+graph TB
+  M["🤖 Model (LLM)"]
+  FC["Function Calling / Tool Use\nHow the model expresses intent\nProvider-specific: tool_calls, tool_use"]
+  MCP["MCP Protocol\nHow tools are discovered, defined, and executed\nProvider-agnostic open standard"]
+  S1["GitHub Server"]
+  S2["Slack Server"]
+  S3["Your Internal API"]
+
+  M -->|"decides to call a tool via"| FC
+  FC -->|"routed through"| MCP
+  MCP --> S1
+  MCP --> S2
+  MCP --> S3
+
+  style M fill:#6366f1,stroke:#6366f1,color:#fff
+  style FC fill:#8b5cf6,stroke:#8b5cf6,color:#fff
+  style MCP fill:#0ea5e9,stroke:#0ea5e9,color:#fff
+```
+
+| Layer | What it does | Examples |
+|---|---|---|
+| **Function calling** | Model expresses "call this tool with these args" | `tool_use` (Anthropic), `tool_calls` (OpenAI) |
+| **MCP** | Standardizes how tools are defined, discovered, and run | The protocol itself |
+
+In practice, most real systems use both: function calling triggers the intent, MCP handles the execution.
+
+---
+
+## What MCP is not
+
+- **Not a framework** — it defines message shapes and session behavior, not how you build your app.
+- **Not middleware** — there is no MCP runtime sitting between your agent and its tools at deploy time.
+- **Not a replacement for direct API calls** — sometimes a direct call is simpler. MCP earns its cost when you need reuse, governance, or provider-agnostic portability. (Module 6 covers this decision.)
+- **Not magic** — the model still needs well-described tools to pick them correctly. Garbage descriptions produce garbage tool selection.
+
+---
+
+## Spec version note
+
+:::warning[Stateful today, stateless in July 2026]
+The current normative spec (2025-11-25) describes MCP as a **stateful session protocol**. A release candidate published May 2026 removes protocol-level sessions, making HTTP transport **stateless**. That RC ships as stable on **July 28, 2026**.
+
+Content in this guide is anchored to **2025-11-25** and noted where the RC changes things. Modules 3, 4, and 8 carry the most affected claims.
+:::
+
+---
+
+## Takeaway
+
+MCP is JSON-RPC 2.0 over a session — an open standard that turns N×M custom integrations into N+M reusable connections. Build a server once; any compatible agent uses it. The model picks a tool from a list, and the server does the work. MCP and function calling are complementary layers, not competing approaches.
+
+---
+
+## Sources
+
+| Source | Type | URL |
+|---|---|---|
+| MCP spec 2025-11-25 · Architecture | **[normative]** | https://modelcontextprotocol.io/specification/2025-11-25/architecture |
+| MCP spec 2025-11-25 · Base Protocol | **[normative]** | https://modelcontextprotocol.io/specification/2025-11-25/basic |
+| modelcontextprotocol.io introduction | **[official]** | https://modelcontextprotocol.io/introduction |
+| Anthropic, Introducing MCP (Nov 2024) | **[official]** | https://www.anthropic.com/news/model-context-protocol |
+| Anthropic, Building effective agents | **[official]** | https://www.anthropic.com/news/building-effective-agents |
+| 2026-07-28 RC blog post | **[official, provisional]** | https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/ |
+| SEP-2567: Sessionless MCP | **[normative-RC]** | https://modelcontextprotocol.io/seps/2567-sessionless-mcp |
