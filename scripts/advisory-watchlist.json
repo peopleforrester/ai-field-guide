@@ -1,0 +1,11 @@
+{
+  "watch": [
+    {
+      "package": "image-size",
+      "advisories": ["GHSA-w3rx-r6r6-pgpr", "GHSA-5p2g-fcmc-qvqq"],
+      "latestAtLastCheck": "2.0.2",
+      "trackingIssue": 21,
+      "note": "Transitive of @docusaurus/mdx-loader. Build-time only. Both advisories were unpatched as of 2026-09-01 and the latest published version sits inside the vulnerable range, so there is nothing to pin to."
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+# ABOUTME: Weekly check for an upstream fix to the advisories tracked in scripts/advisory-watchlist.json
+# ABOUTME: Comments on the tracking issue once, latched by a label, when a watched package moves
+name: Advisory watch
+
+on:
+  schedule:
+    # Mondays 13:17 UTC. GitHub disables scheduled workflows after 60 days
+    # without repository activity, so re-enable this from the Actions tab if
+    # the repo ever goes quiet that long.
+    - cron: '17 13 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: advisory-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check watched advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test the watcher
+        run: npm test
+
+      - name: Check watched advisories
+        id: check
+        run: |
+          set +e
+          node scripts/check-advisory-patch.mjs --comment-dir comments | tee report.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 10 ]; then
+            echo "watcher failed with exit $code"
+            exit "$code"
+          fi
+          {
+            echo '### Advisory watch'
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" -eq 10 ]; then
+            echo 'needs_attention=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'needs_attention=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Notify the tracking issue
+        if: steps.check.outputs.needs_attention == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create advisory-moved \
+            --color B60205 \
+            --description 'A watched advisory or package has moved upstream' \
+            || true
+          for file in comments/issue-*.md; do
+            issue="$(basename "$file" .md)"
+            issue="${issue#issue-}"
+            # The label is the latch. Without it the watch would repeat the same
+            # comment every week for as long as the fix goes unapplied.
+            if gh issue view "$issue" --json labels \
+                 --jq '.labels[].name' | grep -qx 'advisory-moved'; then
+              echo "issue #$issue already flagged, leaving it alone"
+              continue
+            fi
+            gh issue comment "$issue" --body-file "$file"
+            gh issue edit "$issue" --add-label advisory-moved
+            echo "flagged issue #$issue"
+          done
