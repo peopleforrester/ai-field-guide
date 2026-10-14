@@ -51,6 +51,9 @@
   },
   "overrides": {
     "serialize-javascript": "^7.1.0",
-    "webpack-dev-server": "^6.0.0"
+    "webpack-dev-server": "^6.0.0",
+    "katex": "^0.18.2",
+    "tinypool": "^2.1.2",
+    "postcss-selector-parser": "^7.1.6"
   }
 }
