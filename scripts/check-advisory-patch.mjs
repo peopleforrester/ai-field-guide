@@ -28,7 +28,13 @@ function githubHeaders() {
 }
 
 async function getJson(url, headers) {
-  const response = await fetch(url, {headers});
+  let response;
+  try {
+    response = await fetch(url, {headers});
+  } catch (error) {
+    // fetch only says "fetch failed"; the cause names the unreachable host.
+    throw new Error(`GET ${url} could not reach the network: ${error.cause?.message ?? error.message}`);
+  }
   if (!response.ok) {
     throw new Error(`GET ${url} failed: ${response.status} ${response.statusText}`);
   }
